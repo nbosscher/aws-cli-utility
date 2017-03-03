@@ -1,3 +1,3 @@
-package awscli
+package main
 
 const newline = "\r\n"

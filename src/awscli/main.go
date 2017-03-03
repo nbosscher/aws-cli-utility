@@ -1,18 +1,18 @@
 package main
 
 import (
-	"flag"
-	"os"
-	"log"
-	"fmt"
 	"awscli/awscmds"
-	"time"
+	"flag"
+	"fmt"
+	"log"
+	"os"
 	"strings"
+	"time"
 )
 
 var api awscmds.AWSCmds
 
-func main(){
+func main() {
 
 	secret := os.Getenv("AWS_SECRETE")
 	access := os.Getenv("AWS_ACCESS_ID")
@@ -94,7 +94,7 @@ func getCommand() (string, []string) {
 		fmt.Println(err)
 	}
 
-	vals := strings.Trim(string(input[0:n]), newline + " ")
+	vals := strings.Trim(string(input[0:n]), newline+" ")
 	cmd := vals
 
 	k := strings.IndexRune(cmd, ' ')
@@ -131,9 +131,9 @@ func exec(cmd string, args ...string) {
 	case "s3-object-ls":
 		if len(args) == 1 {
 			api.ListBucketFiles(args[0])
-		}else if len(args) == 2 {
+		} else if len(args) == 2 {
 			api.SearchBucketFiles(args[0], args[1])
-		}else{
+		} else {
 			fmt.Println("object-ls requires 1 parameter. got", strings.Join(args, ","))
 			return
 		}
@@ -158,9 +158,9 @@ func exec(cmd string, args ...string) {
 				return
 			}
 
-		}else if len(args) == 2 {
+		} else if len(args) == 2 {
 			mod = time.Unix(0, 0)
-		}else {
+		} else {
 			fmt.Println("s3-bucket-dl requires 2 or 3 parameters")
 			return
 		}
@@ -174,4 +174,3 @@ func exec(cmd string, args ...string) {
 		printCommands()
 	}
 }
-

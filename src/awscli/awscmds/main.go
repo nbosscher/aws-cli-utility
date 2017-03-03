@@ -1,16 +1,16 @@
 package awscmds
 
 import (
+	"fmt"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
-	"log"
 	"github.com/aws/aws-sdk-go/service/s3"
-	"fmt"
-	"strconv"
-	"os"
 	"io"
+	"log"
+	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -25,37 +25,42 @@ type AWSCmds interface {
 
 type awsCmds struct {
 	accessId string
-	secrete string
-	region string
+	secrete  string
+	region   string
 
 	sess *session.Session
-	s3 *s3.S3
+	s3   *s3.S3
 }
 
 func NewAWSCmds(accessId, secrete, region string) AWSCmds {
 	return &awsCmds{
 		accessId: accessId,
-		secrete: secrete,
-		region: region,
+		secrete:  secrete,
+		region:   region,
 	}
 }
 
 func (c *awsCmds) getSession() *session.Session {
-	var err error
 
 	if c.sess == nil {
-		c.sess, err = session.NewSession(&aws.Config{
-			Region:      aws.String(c.region),
-			Credentials: credentials.NewStaticCredentials(c.accessId, c.secrete, ""),
-		})
-
-		if err != nil {
-			fmt.Println(err)
-			log.Fatal()
-		}
+		c.sess = c.createSession()
 	}
 
 	return c.sess
+}
+
+func (c *awsCmds) createSession() *session.Session {
+	sess, err := session.NewSession(&aws.Config{
+		Region:      aws.String(c.region),
+		Credentials: credentials.NewStaticCredentials(c.accessId, c.secrete, ""),
+	})
+
+	if err != nil {
+		fmt.Println(err)
+		log.Fatal()
+	}
+
+	return sess
 }
 
 func (c *awsCmds) getS3() *s3.S3 {
@@ -91,7 +96,7 @@ func (c *awsCmds) ListBuckets() {
 
 func (c *awsCmds) listBucketFiles(bucket string) (*s3.ListObjectsOutput, error) {
 	li, err := c.getS3().ListObjects(&s3.ListObjectsInput{
-		Bucket: aws.String(bucket),
+		Bucket:  aws.String(bucket),
 		MaxKeys: aws.Int64(10000),
 	})
 
@@ -108,9 +113,9 @@ func (c *awsCmds) listBucketFiles(bucket string) (*s3.ListObjectsOutput, error) 
 	for *li.IsTruncated {
 		fmt.Println("performing additional request... (got", len(lst.Contents), "files so far)")
 		li, err = c.getS3().ListObjects(&s3.ListObjectsInput{
-			Bucket: aws.String(bucket),
+			Bucket:  aws.String(bucket),
 			MaxKeys: aws.Int64(10000),
-			Marker: aws.String(marker),
+			Marker:  aws.String(marker),
 		})
 		if err != nil {
 			return nil, err
@@ -142,9 +147,9 @@ func (c *awsCmds) SearchBucketFiles(bucket, prefix string) {
 	fmt.Println("Searching bucket files...")
 
 	li, err := c.getS3().ListObjects(&s3.ListObjectsInput{
-		Bucket: aws.String(bucket),
+		Bucket:  aws.String(bucket),
 		MaxKeys: aws.Int64(10000),
-		Prefix: aws.String(prefix),
+		Prefix:  aws.String(prefix),
 	})
 
 	if err != nil {
@@ -161,10 +166,10 @@ func (c *awsCmds) SearchBucketFiles(bucket, prefix string) {
 	for *li.IsTruncated {
 		fmt.Println("performing additional request... (got", len(lst.Contents), "so far)")
 		li, err = c.getS3().ListObjects(&s3.ListObjectsInput{
-			Bucket: aws.String(bucket),
+			Bucket:  aws.String(bucket),
 			MaxKeys: aws.Int64(10000),
-			Marker: aws.String(marker),
-			Prefix: aws.String(prefix),
+			Marker:  aws.String(marker),
+			Prefix:  aws.String(prefix),
 		})
 		if err != nil {
 			fmt.Println(err)
@@ -183,7 +188,7 @@ func (c *awsCmds) SearchBucketFiles(bucket, prefix string) {
 	c.renderBucketList(lst)
 }
 
-func (c *awsCmds) renderBucketList(lst *s3.ListObjectsOutput){
+func (c *awsCmds) renderBucketList(lst *s3.ListObjectsOutput) {
 	sum := int64(0)
 	for _, ob := range lst.Contents {
 		sum += *ob.Size
@@ -195,7 +200,7 @@ func (c *awsCmds) renderBucketList(lst *s3.ListObjectsOutput){
 	fmt.Printf("%-60s %-20s %-30s %7s %10s %-20s"+newline, "Key", "Owner", "Last Modified", "Size", "Size", "Class")
 	fmt.Println("--------------------------------------------------------------------------------------------------------------------------------------------")
 	for _, ob := range lst.Contents {
-		fmt.Printf("%-60s %-20s %-30s %7s %10s %-20s"+newline, *ob.Key, *ob.Owner.DisplayName, ob.LastModified.String(), formatFileSize(*ob.Size), strconv.FormatInt(*ob.Size,10), *ob.StorageClass)
+		fmt.Printf("%-60s %-20s %-30s %7s %10s %-20s"+newline, *ob.Key, *ob.Owner.DisplayName, ob.LastModified.String(), formatFileSize(*ob.Size), strconv.FormatInt(*ob.Size, 10), *ob.StorageClass)
 	}
 
 	fmt.Println()
@@ -204,7 +209,7 @@ func (c *awsCmds) renderBucketList(lst *s3.ListObjectsOutput){
 func (c *awsCmds) DownloadFile(bucket, key, localFile string) {
 	fmt.Println("Downloading file...")
 
-	by, err := c.downloadFile(bucket, key, localFile)
+	by, err := c.downloadFile(c.getS3(), bucket, key, localFile)
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -215,17 +220,17 @@ func (c *awsCmds) DownloadFile(bucket, key, localFile string) {
 
 }
 
-func (c *awsCmds) downloadFile(bucket, key, localFile string) (int64, error) {
-	o, err := c.getS3().GetObject(&s3.GetObjectInput{
+func (c *awsCmds) downloadFile(client *s3.S3, bucket, key, localFile string) (int64, error) {
+	o, err := client.GetObject(&s3.GetObjectInput{
 		Bucket: aws.String(bucket),
-		Key: aws.String(key),
+		Key:    aws.String(key),
 	})
 
 	if err != nil {
 		return 0, err
 	}
 
-	fi, err := os.OpenFile(localFile, os.O_CREATE | os.O_RDWR, os.ModePerm)
+	fi, err := os.OpenFile(localFile, os.O_CREATE|os.O_RDWR, os.ModePerm)
 	if err != nil {
 		return 0, err
 	}
@@ -238,7 +243,17 @@ func (c *awsCmds) downloadFile(bucket, key, localFile string) (int64, error) {
 	return by, nil
 }
 
+type downloadFileInfo struct {
+	bucket        string
+	key           string
+	localFilePath string
+
+	downloadedSize int64
+}
+
 func (c *awsCmds) DownloadBucket(bucket, localDir string, modifiedAfter time.Time) {
+
+	timer := time.Now()
 
 	lst, err := c.listBucketFiles(bucket)
 	if err != nil {
@@ -246,50 +261,98 @@ func (c *awsCmds) DownloadBucket(bucket, localDir string, modifiedAfter time.Tim
 		return
 	}
 
-
-
 	tot := int64(0)
 	totct := 0
 	for _, v := range lst.Contents {
+		if *v.Size == 0 {
+			// for directories
+			continue
+		}
+
 		if v.LastModified.After(modifiedAfter) {
 			tot += *v.Size
 			totct++
 		}
 	}
 
+	todo := make(chan *downloadFileInfo)
+	done := make(chan *downloadFileInfo)
+
+	worker := func() {
+
+		cl := s3.New(c.createSession())
+
+		for {
+			job := <-todo
+			if job == nil {
+				return
+			}
+
+			// do job
+			job.downloadedSize, err = c.downloadFile(cl, job.bucket, job.key, job.localFilePath)
+
+			if err != nil {
+				done <- job
+				fmt.Println(err)
+				return
+			}
+
+			done <- job
+		}
+	}
+
+	nworkers := 10
+
+	for i := 0; i < nworkers; i++ {
+		go worker()
+	}
+
+	go func() {
+		for _, v := range lst.Contents {
+			if !v.LastModified.After(modifiedAfter) {
+				continue
+			}
+
+			if *v.Size == 0 {
+				// for directories
+				continue
+			}
+
+			path := filepath.Join(localDir, *v.Key)
+
+			err := os.MkdirAll(filepath.Dir(path), os.ModePerm)
+			if err != nil {
+				log.Println(err)
+				return
+			}
+
+			todo <- &downloadFileInfo{
+				bucket:        bucket,
+				key:           *v.Key,
+				localFilePath: path,
+			}
+		}
+
+		// kill workers
+		for i := 0; i < nworkers; i++ {
+			todo <- nil
+		}
+	}()
+
 	sum := int64(0)
 
-	for i, v := range lst.Contents {
-		if !v.LastModified.After(modifiedAfter) {
-			continue
-		}
+	for i := 0; i < totct; i++ {
+		job := <-done
 
-		if *v.Size == 0 {
-			// for directories
-			continue
-		}
+		fmt.Printf("Download: Wrote %-80s %10s"+newline, job.localFilePath, formatFileSize(job.downloadedSize))
 
-		path := filepath.Join(localDir, *v.Key)
+		sum += job.downloadedSize
 
-		err := os.MkdirAll(filepath.Dir(path), os.ModePerm)
-		if err != nil {
-			log.Println(err)
-			return
-		}
-
-		by, err := c.downloadFile(bucket, *v.Key, path)
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
-
-		fmt.Printf("Download: Wrote %-80s %10s"+newline, path, formatFileSize(by))
-
-		sum += *v.Size
-
-		prog := (i+1) * 100 / totct
+		prog := (i + 1) * 100 / totct
 		fmt.Printf("Progress: %-100s %3d%% %10s of %s"+newline, strings.Repeat("=", prog), prog, formatFileSize(sum), formatFileSize(tot))
 	}
+
+	fmt.Println("Downloaded in: ", time.Now().Sub(timer).String())
 
 	fmt.Println("")
 }
@@ -300,14 +363,14 @@ func formatFileSize(size int64) string {
 	}
 
 	if size < 1e6 {
-		return strconv.FormatInt(size / 1e3, 10) + " KB"
+		return strconv.FormatInt(size/1e3, 10) + " KB"
 	}
 
 	if size < 1e9 {
-		return strconv.FormatInt(size / 1e6, 10) + " MB"
+		return strconv.FormatInt(size/1e6, 10) + " MB"
 	}
 
 	//if size < 10e12 {
-	return strconv.FormatInt(size / 1e9, 10) + " GB"
+	return strconv.FormatInt(size/1e9, 10) + " GB"
 	//}
 }

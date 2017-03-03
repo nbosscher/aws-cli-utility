@@ -28,5 +28,5 @@ func TestAWSCmds_DownloadFile(t *testing.T) {
 }
 
 func TestAWSCmds_DownloadBucket(t *testing.T) {
-	getCmd().DownloadBucket(test_bucket, "/tmp/"+test_bucket, time.Now().Add(-5 * 24 * time.Hour))
+	getCmd().DownloadBucket(test_bucket, "/tmp/"+test_bucket, time.Now().Add(-5*24*time.Hour))
 }
