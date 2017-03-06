@@ -240,6 +240,8 @@ func (c *awsCmds) downloadFile(client *s3.S3, bucket, key, localFile string) (in
 		return 0, err
 	}
 
+	fi.Close()
+
 	return by, nil
 }
 

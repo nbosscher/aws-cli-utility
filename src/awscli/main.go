@@ -20,10 +20,6 @@ func main() {
 	ky := flag.String("aws-secrete", "", "AWS secrete key to use for this session. Alternatively AWS_SECRETE environment variable can be used")
 	acc := flag.String("aws-access-id", "", "AWS access id to use for this session. Alternatively AWS_ACCESS_ID environment variable can be used")
 	rg := flag.String("aws-region", "us-east-1", "AWS region-id to use for this session")
-	cmd := flag.String("command", "", `[optional] executes a single command instead of starting interactive mode.
-	Commands:
-
-	`)
 
 	flag.Parse()
 
