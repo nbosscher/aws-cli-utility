@@ -45,12 +45,6 @@ func main() {
 
 	api = awscmds.NewAWSCmds(access, secret, *rg)
 
-	if *cmd != "" {
-		fmt.Println(os.Args)
-		//exec(cmd, os.Args...)
-		return
-	}
-
 	fmt.Println("Enter a command:")
 	for {
 		cmd, args := getCommand()
