@@ -21,6 +21,7 @@ type AWSCmds interface {
 	SearchBucketFiles(bucket, prefix string)
 	DownloadFile(bucket, key, localFile string)
 	DownloadBucket(bucket, localDir string, modifiedAfter time.Time)
+	DownloadBucketSilent(bucket, localDir string, modifiedAfter time.Time) (int64, error)
 }
 
 type awsCmds struct {
@@ -94,7 +95,7 @@ func (c *awsCmds) ListBuckets() {
 	fmt.Println()
 }
 
-func (c *awsCmds) listBucketFiles(bucket string) (*s3.ListObjectsOutput, error) {
+func (c *awsCmds) listBucketFiles(bucket string, silent bool) (*s3.ListObjectsOutput, error) {
 	li, err := c.getS3().ListObjects(&s3.ListObjectsInput{
 		Bucket:  aws.String(bucket),
 		MaxKeys: aws.Int64(10000),
@@ -111,7 +112,9 @@ func (c *awsCmds) listBucketFiles(bucket string) (*s3.ListObjectsOutput, error) 
 	}
 
 	for *li.IsTruncated {
-		fmt.Println("performing additional request... (got", len(lst.Contents), "files so far)")
+		if !silent {
+			fmt.Println("performing additional request... (got", len(lst.Contents), "files so far)")
+		}
 		li, err = c.getS3().ListObjects(&s3.ListObjectsInput{
 			Bucket:  aws.String(bucket),
 			MaxKeys: aws.Int64(10000),
@@ -134,7 +137,7 @@ func (c *awsCmds) listBucketFiles(bucket string) (*s3.ListObjectsOutput, error) 
 func (c *awsCmds) ListBucketFiles(bucket string) {
 	fmt.Println("Listing bucket files...")
 
-	lst, err := c.listBucketFiles(bucket)
+	lst, err := c.listBucketFiles(bucket, false)
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -253,14 +256,24 @@ type downloadFileInfo struct {
 	downloadedSize int64
 }
 
-func (c *awsCmds) DownloadBucket(bucket, localDir string, modifiedAfter time.Time) {
+func (c *awsCmds) DownloadBucketSilent(bucket, localDir string, modifiedAfter time.Time) (int64, error) {
+	return c.downloadBucket(bucket, localDir, modifiedAfter, true)
+}
 
+func (c *awsCmds) DownloadBucket(bucket, localDir string, modifiedAfter time.Time) {
+	_, err := c.downloadBucket(bucket, localDir, modifiedAfter, false)
+	if err != nil {
+		log.Println(err)
+		log.Println("")
+	}
+}
+
+func (c *awsCmds) downloadBucket(bucket, localDir string, modifiedAfter time.Time, silent bool) (int64, error) {
 	timer := time.Now()
 
-	lst, err := c.listBucketFiles(bucket)
+	lst, err := c.listBucketFiles(bucket, silent)
 	if err != nil {
-		fmt.Println(err)
-		return
+		return 0, err
 	}
 
 	tot := int64(0)
@@ -345,18 +358,21 @@ func (c *awsCmds) DownloadBucket(bucket, localDir string, modifiedAfter time.Tim
 
 	for i := 0; i < totct; i++ {
 		job := <-done
-
-		fmt.Printf("Download: Wrote %-80s %10s"+newline, job.localFilePath, formatFileSize(job.downloadedSize))
-
 		sum += job.downloadedSize
 
-		prog := (i + 1) * 100 / totct
-		fmt.Printf("Progress: %-100s %3d%% %10s of %s"+newline, strings.Repeat("=", prog), prog, formatFileSize(sum), formatFileSize(tot))
+		if !silent {
+			fmt.Printf("Download: Wrote %-80s %10s"+newline, job.localFilePath, formatFileSize(job.downloadedSize))
+			prog := (i + 1) * 100 / totct
+			fmt.Printf("Progress: %-100s %3d%% %10s of %s"+newline, strings.Repeat("=", prog), prog, formatFileSize(sum), formatFileSize(tot))
+		}
 	}
 
-	fmt.Println("Downloaded in: ", time.Now().Sub(timer).String())
+	if !silent {
+		fmt.Println("Downloaded in: ", time.Now().Sub(timer).String())
+		fmt.Println("")
+	}
 
-	fmt.Println("")
+	return sum, nil
 }
 
 func formatFileSize(size int64) string {

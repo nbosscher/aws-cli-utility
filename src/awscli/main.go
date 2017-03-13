@@ -4,13 +4,25 @@ import (
 	"awscli/awscmds"
 	"flag"
 	"fmt"
-	"log"
 	"os"
 	"strings"
 	"time"
 )
 
 var api awscmds.AWSCmds
+
+type stringargs []string
+
+func (s *stringargs) String() string {
+	return strings.Join([]string(*s), ", ")
+}
+
+func (s *stringargs) Set(value string) error {
+	*s = append(*s, value)
+	return nil
+}
+
+var args stringargs
 
 func main() {
 
@@ -20,6 +32,8 @@ func main() {
 	ky := flag.String("aws-secrete", "", "AWS secrete key to use for this session. Alternatively AWS_SECRETE environment variable can be used")
 	acc := flag.String("aws-access-id", "", "AWS access id to use for this session. Alternatively AWS_ACCESS_ID environment variable can be used")
 	rg := flag.String("aws-region", "us-east-1", "AWS region-id to use for this session")
+	cmd := flag.String("command", "", "Runs a command in non-interactive-mode")
+	flag.Var(&args, "arg", "Arguement(s) for a non-interactive-mode command (may be set multiple times)")
 
 	flag.Parse()
 
@@ -34,25 +48,31 @@ func main() {
 	if secret == "" {
 		fmt.Println("missing -aws-secrete")
 		flag.Usage()
-		log.Fatal()
+		return
 	}
 
 	if access == "" {
 		fmt.Println("missing -aws-access-id")
 		flag.Usage()
-		log.Fatal()
+		return
 	}
 
 	api = awscmds.NewAWSCmds(access, secret, *rg)
 
+	if *cmd != "" {
+		executeNonInteractive(api, *cmd, []string(args))
+		return
+	}
+
+	fmt.Println("Entering Interactive Mode (include -command for non-interactive mode):")
 	fmt.Println("Enter a command:")
 	for {
 		cmd, args := getCommand()
-		exec(cmd, args...)
+		execInteractive(cmd, args...)
 	}
 }
 
-func printCommands() {
+func printInteractiveCommands() {
 	fmt.Println(`Commands:
 s3-object-ls <bucket> [<search-prefix>]
    Lists the objects in a bucket and optionally searches for a specific prefix
@@ -116,7 +136,7 @@ func getCommand() (string, []string) {
 	return cmd, args
 }
 
-func exec(cmd string, args ...string) {
+func execInteractive(cmd string, args ...string) {
 	switch cmd {
 	case "s3-object-ls":
 		if len(args) == 1 {
@@ -161,6 +181,6 @@ func exec(cmd string, args ...string) {
 	case "help":
 		fallthrough
 	default:
-		printCommands()
+		printInteractiveCommands()
 	}
 }
